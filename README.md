@@ -1,11 +1,12 @@
 # MarketMind
 
 MarketMind is a modular, multi-industry business intelligence and data science
-platform. This repository currently contains its Python foundation only.
+platform. This repository contains its Python foundation and a Streamlit
+presentation shell with a read-only dataset registry overview.
 
 ## Development setup
 
-Python 3.11 or newer is required.
+Python 3.12 or newer is required.
 
 ```console
 python -m venv .venv
