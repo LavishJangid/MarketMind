@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path
 
@@ -76,8 +77,22 @@ def test_registry_filename_rejects_symlink_that_resolves_outside_data_dir(
     link = tmp_path / "registry-link.json"
     try:
         link.symlink_to(outside)
-    except (NotImplementedError, OSError):
-        pytest.skip("Symlink creation is unavailable in this environment")
+    except NotImplementedError:
+        pytest.skip("This operating system does not support symlinks")
+    except OSError as exc:
+        unsupported_errnos = {
+            errno.EACCES,
+            errno.EPERM,
+            getattr(errno, "ENOTSUP", errno.EPERM),
+            getattr(errno, "EOPNOTSUPP", errno.EPERM),
+        }
+        unsupported_winerrors = {50, 1314}  # not supported; symlink privilege unavailable
+        if (
+            exc.errno in unsupported_errnos
+            or getattr(exc, "winerror", None) in unsupported_winerrors
+        ):
+            pytest.skip(f"Environment prevents symlink creation: {exc}")
+        raise
 
     status = inspect_registry(Settings(data_dir=tmp_path), "registry-link.json")
 

@@ -3,8 +3,8 @@
 ## Current milestone: Milestone 2 — Dataset Registry & Ingestion
 
 Milestone 1 (Foundation) and the Presentation Layer Shell & Overview are complete.
-MM-021 adds the backend dataset record value object. Registry persistence,
-filesystem resolution, and ingestion have not been implemented.
+MM-021 added the backend dataset record value object. MM-022 adds safe storage
+path resolution. Registry persistence and ingestion have not been implemented.
 
 ### Completed
 
@@ -51,24 +51,38 @@ filesystem resolution, and ingestion have not been implemented.
 - Added focused model tests in `tests/test_dataset_record.py` for construction,
   immutability, path validation, and delegation to `DatasetMetadata` validation.
 - No registry service methods or dependencies were added in MM-021.
-- **MM-022 has not started.**
+
+- **MM-022 — Storage Path Policy & Secure Filesystem Resolver:** added
+  `resolve_storage_path` to `marketmind.registry`. It accepts a `DatasetRecord`
+  or `PurePosixPath`, resolves against `Settings.data_dir`, follows existing
+  symlinks, and checks containment with `Path.is_relative_to()`.
+- A valid missing destination is returned as an absolute normalized path;
+  neither the target nor missing parent directories are created. Callers can
+  check `Path.exists()` to distinguish it from an existing target.
+- Added resolver tests for existing and nested files, invalid/root paths,
+  existing outside paths, missing targets, no mutation, and symlinks. Symlink
+  skips are limited to unsupported platforms and known permission/support
+  failures. The existing registry symlink test was given the same narrow skip
+  policy.
+- **MM-023 has not started.**
 
 ### Verification
 
 - `python -m compileall -q src app tests`: passed (exit code 0).
 - `python -m ruff check .`: passed (exit code 0).
 - `python -m pytest -v`, with PowerShell `TEMP` and `TMP` pointed to a temporary
-  directory under the writable workspace: 77 passed, 1 skipped, 0 failures, and
-  0 setup errors (exit code 0). The symlink escape test was skipped because this
-  environment does not permit symlink creation. Pytest emitted a cache warning
-  because `.pytest_cache` is not writable here.
+  directory under the writable workspace: 86 passed, 4 skipped, 0 failures, and
+  0 setup errors (exit code 0). All four symlink tests skipped because Windows
+  returned `WinError 1314` (symlink privilege unavailable). Pytest emitted a
+  cache warning because `.pytest_cache` is not writable here.
 - `git diff --check`: passed.
 - Verification used Python 3.13.7. Python 3.12 is not installed in this
   environment and was not runtime-tested.
+- No dependencies were added for MM-021 or MM-022.
 - The presentation-layer Streamlit startup and HTTP health checks were verified
-  previously; they were not rerun for MM-021.
+  previously; they were not rerun for MM-022.
 
 ### Remaining work
 
-- MM-022 path resolution has not started and requires approval before work begins.
-- Subsequent MM-023 to MM-040 registry and ingestion work remains pending.
+- MM-023 registry loading/persistence has not started and requires approval.
+- Subsequent MM-024 to MM-040 registry and ingestion work remains pending.
