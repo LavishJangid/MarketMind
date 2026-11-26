@@ -1,10 +1,10 @@
 # MarketMind Project Status
 
-## Current milestone: Presentation Layer Shell & Overview
+## Current milestone: Milestone 2 — Dataset Registry & Ingestion
 
-Milestone 1 (Foundation) was completed and verified previously. Presentation layer
-development has now started with the Streamlit application shell, shared UI
-components, read-only registry inspection, and the Platform Overview page.
+Milestone 1 (Foundation) and the Presentation Layer Shell & Overview are complete.
+MM-021 adds the backend dataset record value object. Registry persistence,
+filesystem resolution, and ingestion have not been implemented.
 
 ### Completed
 
@@ -40,27 +40,35 @@ components, read-only registry inspection, and the Platform Overview page.
 - Added registry and Streamlit `AppTest` UI tests in `tests/test_registry.py`
   and `tests/test_ui_app.py`.
 
+#### Milestone 2 — Dataset Registry & Ingestion
+
+- **MM-021 — Backend Dataset Record & Registry API:** added the immutable
+  `marketmind.registry.DatasetRecord`, composing the existing
+  `DatasetMetadata` with a portable relative `PurePosixPath`. The model rejects
+  missing, absolute, traversing, and non-portable path shapes while leaving
+  metadata field validation to the existing contract. It performs no registry
+  I/O or filesystem resolution.
+- Added focused model tests in `tests/test_dataset_record.py` for construction,
+  immutability, path validation, and delegation to `DatasetMetadata` validation.
+- No registry service methods or dependencies were added in MM-021.
+- **MM-022 has not started.**
+
 ### Verification
 
 - `python -m compileall -q src app tests`: passed (exit code 0).
 - `python -m ruff check .`: passed (exit code 0).
 - `python -m pytest -v`, with PowerShell `TEMP` and `TMP` pointed to a temporary
-  directory under the writable workspace: 62 passed, 1 skipped, 0 failures, and
+  directory under the writable workspace: 77 passed, 1 skipped, 0 failures, and
   0 setup errors (exit code 0). The symlink escape test was skipped because this
   environment does not permit symlink creation. Pytest emitted a cache warning
   because `.pytest_cache` is not writable here.
-- The initial pytest attempt with the default Windows temporary directory had 9
-  setup errors because access to `C:\Users\lavis\AppData\Local\Temp\pytest-of-lavis`
-  was denied. Using the writable workspace temporary directory resolved them.
-- Streamlit started with
-  `python -m streamlit run app/main.py --server.headless true --server.address 127.0.0.1 --server.port 8511`;
-  `/_stcore/health` returned HTTP `200` (`ok`) and `/` returned HTTP `200`.
-- Verification ran on Python 3.13.7. Python 3.12 is not installed in this
-  environment and was not runtime-tested. A GitHub Actions workflow now runs
-  compileall, Ruff, and pytest on Python 3.12; that workflow has not yet run.
+- `git diff --check`: passed.
+- Verification used Python 3.13.7. Python 3.12 is not installed in this
+  environment and was not runtime-tested.
+- The presentation-layer Streamlit startup and HTTP health checks were verified
+  previously; they were not rerun for MM-021.
 
-### Remaining work (pending review)
+### Remaining work
 
-- Review and approve the application shell and Overview page before starting
-  dataset registry backend implementation or industry analytics (Retail &
-  E-commerce, Banking & Marketing, Hospitality).
+- MM-022 path resolution has not started and requires approval before work begins.
+- Subsequent MM-023 to MM-040 registry and ingestion work remains pending.
