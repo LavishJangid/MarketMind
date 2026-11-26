@@ -38,6 +38,45 @@ def test_invalid_log_level_is_rejected() -> None:
         Settings(log_level="TRACE")
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("app_name", 1),
+        ("environment", None),
+        ("log_level", 10),
+        ("debug", "false"),
+    ],
+)
+def test_invalid_direct_setting_types_are_rejected(field: str, value: object) -> None:
+    with pytest.raises(ConfigurationError, match=field):
+        Settings(**{field: value})
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("MARKETMIND_APP_NAME", 1),
+        ("MARKETMIND_ENVIRONMENT", None),
+        ("MARKETMIND_LOG_LEVEL", 20),
+        ("MARKETMIND_DEBUG", 1),
+        ("MARKETMIND_DATA_DIR", b"data"),
+    ],
+)
+def test_invalid_environment_types_are_rejected(name: str, value: object) -> None:
+    with pytest.raises(ConfigurationError, match=name):
+        Settings.from_env({name: value})  # type: ignore[dict-item]
+
+
+def test_non_mapping_environment_is_rejected() -> None:
+    with pytest.raises(ConfigurationError, match="mapping"):
+        Settings.from_env([])  # type: ignore[arg-type]
+
+
+def test_explicit_empty_environment_log_level_is_rejected() -> None:
+    with pytest.raises(ConfigurationError, match="log level"):
+        Settings.from_env({"MARKETMIND_LOG_LEVEL": ""})
+
+
 @pytest.mark.parametrize("value", ["", "   "])
 def test_empty_data_directory_is_rejected(value: str) -> None:
     with pytest.raises(ConfigurationError, match="data_dir"):

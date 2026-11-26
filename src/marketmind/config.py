@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
 
 from marketmind.errors import ConfigurationError
 
 
 def _parse_bool(name: str, value: str) -> bool:
+    if not isinstance(value, str):
+        raise ConfigurationError(f"{name} must be a boolean value represented as text")
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
         return True
@@ -30,6 +32,11 @@ class Settings:
     debug: bool = False
 
     def __post_init__(self) -> None:
+        for field_name in ("app_name", "environment", "log_level"):
+            if not isinstance(getattr(self, field_name), str):
+                raise ConfigurationError(f"{field_name} must be a string")
+        if not isinstance(self.debug, bool):
+            raise ConfigurationError("debug must be a boolean")
         if not self.app_name.strip():
             raise ConfigurationError("app_name cannot be empty")
         if not self.environment.strip():
@@ -44,7 +51,11 @@ class Settings:
 
         try:
             raw_data_dir = os.fspath(self.data_dir)
-            if not raw_data_dir.strip() or "\0" in raw_data_dir:
+            if (
+                not isinstance(raw_data_dir, str)
+                or not raw_data_dir.strip()
+                or "\0" in raw_data_dir
+            ):
                 raise ValueError
             data_dir = Path(raw_data_dir)
         except (TypeError, ValueError, OSError) as exc:
@@ -55,11 +66,32 @@ class Settings:
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
         """Load settings from ``MARKETMIND_*`` variables."""
         values = os.environ if environ is None else environ
-        debug = _parse_bool("MARKETMIND_DEBUG", values.get("MARKETMIND_DEBUG", "false"))
+        if not isinstance(values, Mapping):
+            raise ConfigurationError("environment settings must be a mapping of strings")
+
+        defaults = {
+            "MARKETMIND_DEBUG": "false",
+            "MARKETMIND_APP_NAME": "MarketMind",
+            "MARKETMIND_ENVIRONMENT": "development",
+            "MARKETMIND_DATA_DIR": "data",
+        }
+        env_values: dict[str, str] = {}
+        for name, default in defaults.items():
+            value = values.get(name, default)
+            if not isinstance(value, str):
+                raise ConfigurationError(f"{name} must be a string")
+            env_values[name] = value
+        debug = _parse_bool("MARKETMIND_DEBUG", env_values["MARKETMIND_DEBUG"])
+        if "MARKETMIND_LOG_LEVEL" in values:
+            log_level = values["MARKETMIND_LOG_LEVEL"]
+            if not isinstance(log_level, str):
+                raise ConfigurationError("MARKETMIND_LOG_LEVEL must be a string")
+        else:
+            log_level = "DEBUG" if debug else "INFO"
         return cls(
-            app_name=values.get("MARKETMIND_APP_NAME", "MarketMind"),
-            environment=values.get("MARKETMIND_ENVIRONMENT", "development"),
-            log_level=values.get("MARKETMIND_LOG_LEVEL", "DEBUG" if debug else "INFO"),
-            data_dir=Path(values.get("MARKETMIND_DATA_DIR", "data")),
+            app_name=env_values["MARKETMIND_APP_NAME"],
+            environment=env_values["MARKETMIND_ENVIRONMENT"],
+            log_level=log_level,
+            data_dir=env_values["MARKETMIND_DATA_DIR"],
             debug=debug,
         )
