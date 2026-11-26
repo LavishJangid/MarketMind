@@ -3,8 +3,9 @@
 ## Current milestone: Milestone 2 — Dataset Registry & Ingestion
 
 Milestone 1 (Foundation) and the Presentation Layer Shell & Overview are complete.
-MM-021 added the backend dataset record value object. MM-022 adds safe storage
-path resolution. Registry persistence and ingestion have not been implemented.
+MM-021 added the backend dataset record value object, MM-022 added safe storage
+path resolution, and MM-023 added read-only backend registry loading/listing.
+Registry writes and ingestion have not been implemented.
 
 ### Completed
 
@@ -64,25 +65,48 @@ path resolution. Registry persistence and ingestion have not been implemented.
   skips are limited to unsupported platforms and known permission/support
   failures. The existing registry symlink test was given the same narrow skip
   policy.
-- **MM-023 has not started.**
+
+- **MM-023 — Backend Registry Loading & Listing:** added `load_registry(settings)`,
+  returning an immutable tuple of validated `DatasetRecord` values. The
+  versioned JSON schema is `{"schema_version": 1, "datasets": [...]}`; each
+  record contains nested `metadata` and a relative `storage_path`.
+- Missing registry files return an empty tuple. Malformed JSON, invalid
+  structure, unsupported versions, duplicate IDs, and unmappable legacy
+  records raise `RegistryFormatError`. Metadata and path contract violations
+  raise the existing `DataContractError`; filesystem read errors propagate as
+  `OSError` rather than being treated as an empty registry.
+- Legacy list and `{"datasets": [...]}` envelopes are read only when each
+  record includes a valid `storage_path`. Existing UI legacy records without a
+  storage path cannot be represented as `DatasetRecord` and are rejected
+  explicitly; no path is fabricated and no file is rewritten.
+- Registry file and dataset paths are checked through the MM-022
+  `resolve_storage_path` resolver. Duplicate dataset IDs are rejected;
+  identical file contents under different IDs are accepted. No dependencies or
+  write operations were added.
+- Added `tests/test_backend_registry.py` for versioned and legacy reads, error
+  handling, duplicate behavior, resolver integration, and returned tuple
+  immutability.
+- MM-023 changed `src/marketmind/registry.py`, added
+  `tests/test_backend_registry.py`, and updated `PROJECT_STATUS.md`.
+- **MM-024 and later work has not started.**
 
 ### Verification
 
 - `python -m compileall -q src app tests`: passed (exit code 0).
 - `python -m ruff check .`: passed (exit code 0).
 - `python -m pytest -v`, with PowerShell `TEMP` and `TMP` pointed to a temporary
-  directory under the writable workspace: 86 passed, 4 skipped, 0 failures, and
+  directory under the writable workspace: 109 passed, 4 skipped, 0 failures, and
   0 setup errors (exit code 0). All four symlink tests skipped because Windows
   returned `WinError 1314` (symlink privilege unavailable). Pytest emitted a
   cache warning because `.pytest_cache` is not writable here.
 - `git diff --check`: passed.
 - Verification used Python 3.13.7. Python 3.12 is not installed in this
   environment and was not runtime-tested.
-- No dependencies were added for MM-021 or MM-022.
+- No dependencies were added for MM-021, MM-022, or MM-023.
 - The presentation-layer Streamlit startup and HTTP health checks were verified
-  previously; they were not rerun for MM-022.
+  previously; they were not rerun for MM-023.
 
 ### Remaining work
 
-- MM-023 registry loading/persistence has not started and requires approval.
-- Subsequent MM-024 to MM-040 registry and ingestion work remains pending.
+- MM-024 and later registry and ingestion work remains pending and requires
+  approval before implementation.
