@@ -182,28 +182,71 @@ def test_update_dataset_metadata_write_failure_preserves_registry(
     assert list(tmp_path.glob(".registry.json.*.tmp")) == []
 
 
-@pytest.mark.parametrize("legacy", [[{"dataset_id": "x"}], {"datasets": []}])
-def test_mutations_reject_legacy_without_modifying_bytes(tmp_path: Path, legacy: object) -> None:
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        [
+            {
+                "dataset_id": "dataset-001",
+                "name": "Orders",
+                "industry": "retail",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "storage_path": "datasets/a.parquet",
+            }
+        ],
+        {
+            "datasets": [
+                {
+                    "dataset_id": "dataset-001",
+                    "name": "Orders",
+                    "industry": "retail",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                    "storage_path": "datasets/a.parquet",
+                }
+            ]
+        },
+    ],
+)
+@pytest.mark.parametrize("operation", ["register", "update", "metadata"])
+def test_mutations_reject_legacy_without_modifying_bytes(
+    tmp_path: Path, legacy: object, operation: str
+) -> None:
     path = tmp_path / "registry.json"
     original = json.dumps(legacy).encode()
     path.write_bytes(original)
     with pytest.raises(RegistryFormatError, match="legacy registry"):
-        registry_api.register_dataset(Settings(data_dir=tmp_path), _record())
+        settings = Settings(data_dir=tmp_path)
+        if operation == "register":
+            registry_api.register_dataset(settings, _record())
+        elif operation == "update":
+            registry_api.update_dataset(settings, _record())
+        else:
+            registry_api.update_dataset_metadata(settings, "dataset-001", _metadata())
     assert path.read_bytes() == original
 
 
 @pytest.mark.parametrize(
     "original",
-    [b"{bad", b'{"schema_version": 99, "datasets": []}',
-     b'{"schema_version": 1, "datasets": [{"metadata": {}, "storage_path": "x"}]}'],
+    [
+        b"{bad",
+        b'{"schema_version": 99, "datasets": []}',
+        b'{"schema_version": 1, "datasets": [{"metadata": {}, "storage_path": "x"}]}',
+    ],
 )
+@pytest.mark.parametrize("operation", ["register", "update", "metadata"])
 def test_mutations_reject_corrupt_or_invalid_registry_unchanged(
-    tmp_path: Path, original: bytes
+    tmp_path: Path, original: bytes, operation: str
 ) -> None:
     path = tmp_path / "registry.json"
     path.write_bytes(original)
     with pytest.raises((RegistryFormatError, DataContractError)):
-        registry_api.register_dataset(Settings(data_dir=tmp_path), _record())
+        settings = Settings(data_dir=tmp_path)
+        if operation == "register":
+            registry_api.register_dataset(settings, _record())
+        elif operation == "update":
+            registry_api.update_dataset(settings, _record())
+        else:
+            registry_api.update_dataset_metadata(settings, "dataset-001", _metadata())
     assert path.read_bytes() == original
 
 

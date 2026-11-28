@@ -5,9 +5,9 @@
 Milestone 1 (Foundation) and the Presentation Layer Shell & Overview are complete.
 MM-021 added the backend dataset record value object, MM-022 added safe storage
 path resolution, MM-023 added read-only backend registry loading/listing, and
-MM-024 implemented registry registration/update writes. Dataset ingestion
-remains pending. MM-026 adds metadata-only updates with immutable dataset
-identity and storage paths.
+MM-024 implemented registry registration/update writes. MM-026 adds
+metadata-only updates with immutable dataset identity and storage paths.
+Dataset ingestion remains pending.
 
 ### Completed
 
@@ -121,8 +121,7 @@ identity and storage paths.
   because `.pytest_cache` is not writable. `TEMP` and `TMP` were set to a
   temporary directory under the writable workspace for test runs.
 - MM-025 registration capability was implemented as part of MM-024. MM-026 is
-  implemented and awaiting review. MM-027 and later issues have not started. No
-  commit or push was performed.
+  implemented and awaiting review.
 
 - **MM-026 — Metadata-only Updates with Immutable Identity/Storage Fields:**
   implemented `update_dataset_metadata(settings, dataset_id, metadata)`.
@@ -140,14 +139,36 @@ identity and storage paths.
   `.pytest_cache` is not writable; `TEMP` and `TMP` were set to a workspace
   temporary directory.
 - MM-026 implementation is complete and awaiting review. MM-027 and later
-  issues have not started.
+  issues had not started at the MM-026 completion point.
+
+- **MM-027 — Legacy Registry Compatibility / Explicit Migration Policy:**
+  confirmed and tested versioned schema v1 as the canonical writable format.
+  Legacy list and `datasets` envelope formats remain readable only when every
+  record maps to a valid `DatasetRecord` with its own valid `storage_path`.
+  Missing paths are never fabricated; invalid metadata, invalid paths, and
+  mixed valid/invalid entries reject the entire load. Legacy reads preserve
+  original file bytes. Registration, full-record update, and metadata-only
+  update reject legacy registries without changing them. Malformed JSON and
+  unsupported schema versions also remain protected from mutation. No automatic
+  migration or schema upgrade is performed.
+- No registry implementation changes were needed. Tests were added or extended
+  in `tests/test_backend_registry.py` and `tests/test_registry_operations.py`;
+  `PROJECT_STATUS.md` records the policy and verification.
+- Verification on Python 3.13.7: compileall, Ruff, and `git diff --check`
+  passed. `python -m pytest -v` completed with 145 passed, 6 skipped, 0 failed,
+  and 0 errors. All six symlink tests skipped because Windows symlink creation
+  returned WinError 1314. Pytest emitted one cache warning because
+  `.pytest_cache` is not writable; `TEMP` and `TMP` were set to a workspace
+  temporary directory.
+- MM-027 implementation is complete and awaiting code review. MM-028 and later
+  issues have not started. No commit or push was performed.
 
 ### Verification
 
 - `python -m compileall -q src app tests`: passed (exit code 0).
 - `python -m ruff check .`: passed (exit code 0).
 - `python -m pytest -v`, with PowerShell `TEMP` and `TMP` pointed to a temporary
-  directory under the writable workspace: 129 passed, 6 skipped, 0 failed, and
+  directory under the writable workspace: 145 passed, 6 skipped, 0 failed, and
   0 errors (exit code 0). All six symlink tests skipped because Windows
   returned `WinError 1314` (symlink privilege unavailable). Pytest emitted a
   cache warning because `.pytest_cache` is not writable here.
@@ -160,4 +181,4 @@ identity and storage paths.
 
 ### Remaining work
 
-- MM-027 and later registry/ingestion work remains pending.
+- MM-028 and later registry/ingestion work remains pending.

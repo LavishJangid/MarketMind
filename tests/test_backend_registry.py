@@ -93,13 +93,15 @@ def test_load_registry_accepts_mappable_legacy_shapes(
     tmp_path: Path,
     legacy_payload: object,
 ) -> None:
-    _write_registry(tmp_path, legacy_payload)
+    registry_path = _write_registry(tmp_path, legacy_payload)
+    original_bytes = registry_path.read_bytes()
 
     records = load_registry(Settings(data_dir=tmp_path))
 
     assert len(records) == 1
     assert records[0].metadata.dataset_id == "dataset-001"
     assert records[0].storage_path == PurePosixPath("datasets/dataset-001/data.parquet")
+    assert registry_path.read_bytes() == original_bytes
 
 
 @pytest.mark.parametrize(
@@ -117,6 +119,44 @@ def test_legacy_records_without_storage_path_are_not_invented(
 
     with pytest.raises(RegistryFormatError, match="cannot be mapped.*without inventing a path"):
         load_registry(Settings(data_dir=tmp_path))
+
+
+@pytest.mark.parametrize(
+    "invalid_record",
+    [
+        _metadata("") | {"storage_path": "datasets/data.parquet"},
+        _metadata() | {"storage_path": "../outside.parquet"},
+    ],
+)
+@pytest.mark.parametrize("as_envelope", [False, True])
+def test_legacy_invalid_metadata_or_path_is_rejected(
+    tmp_path: Path,
+    invalid_record: dict[str, object],
+    as_envelope: bool,
+) -> None:
+    payload: object = {"datasets": [invalid_record]} if as_envelope else [invalid_record]
+    _write_registry(tmp_path, payload)
+
+    with pytest.raises(DataContractError):
+        load_registry(Settings(data_dir=tmp_path))
+
+
+@pytest.mark.parametrize("as_envelope", [False, True])
+def test_mixed_legacy_records_are_rejected_as_a_whole(
+    tmp_path: Path,
+    as_envelope: bool,
+) -> None:
+    valid_record = _metadata() | {"storage_path": "datasets/data.parquet"}
+    invalid_record = _metadata("") | {"storage_path": "datasets/invalid.parquet"}
+    entries = [valid_record, invalid_record]
+    payload: object = {"datasets": entries} if as_envelope else entries
+    registry_path = _write_registry(tmp_path, payload)
+    original_bytes = registry_path.read_bytes()
+
+    with pytest.raises(DataContractError):
+        load_registry(Settings(data_dir=tmp_path))
+
+    assert registry_path.read_bytes() == original_bytes
 
 
 def test_legacy_empty_shapes_are_safe_to_read(tmp_path: Path) -> None:
