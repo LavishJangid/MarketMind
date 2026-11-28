@@ -47,6 +47,18 @@ def _record(
     )
 
 
+def _metadata(
+    dataset_id: str = "dataset-001", name: str = "Renamed Orders"
+) -> DatasetMetadata:
+    return DatasetMetadata(
+        dataset_id,
+        name,
+        "retail",
+        datetime(2026, 2, 1, tzinfo=UTC),
+        "updated source",
+    )
+
+
 def test_register_missing_registry_and_preserve_duplicate_content(tmp_path: Path) -> None:
     settings = Settings(data_dir=tmp_path / "nested" / "data")
     first = _record()
@@ -89,6 +101,85 @@ def test_update_rejects_missing_registry_and_unknown_id(tmp_path: Path) -> None:
     registry_api.register_dataset(settings, _record())
     with pytest.raises(DataContractError, match="not registered"):
         registry_api.update_dataset(settings, _record("unknown"))
+
+
+def test_update_dataset_metadata_preserves_identity_path_and_record_order(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(data_dir=tmp_path)
+    records = (
+        _record("dataset-001", "datasets/original.parquet"),
+        _record("dataset-002", "datasets/second.parquet"),
+        _record("dataset-003", "datasets/third.parquet"),
+    )
+    for record in records:
+        registry_api.register_dataset(settings, record)
+
+    returned = registry_api.update_dataset_metadata(
+        settings, "dataset-002", _metadata("dataset-002")
+    )
+    persisted = load_registry(settings)
+
+    assert returned.metadata == _metadata("dataset-002")
+    assert returned.metadata.dataset_id == "dataset-002"
+    assert returned.storage_path == records[1].storage_path
+    assert [record.metadata.dataset_id for record in persisted] == [
+        "dataset-001",
+        "dataset-002",
+        "dataset-003",
+    ]
+    assert persisted[0] == records[0]
+    assert persisted[1].metadata == returned.metadata
+    assert persisted[1].storage_path == records[1].storage_path
+    assert persisted[2] == records[2]
+
+
+def test_update_dataset_metadata_rejects_invalid_or_mismatched_metadata(
+    tmp_path: Path,
+) -> None:
+    settings = Settings(data_dir=tmp_path)
+    registry_api.register_dataset(settings, _record())
+    invalid_metadata = object.__new__(DatasetMetadata)
+    object.__setattr__(invalid_metadata, "dataset_id", "dataset-001")
+    object.__setattr__(invalid_metadata, "name", " ")
+    object.__setattr__(invalid_metadata, "industry", "retail")
+    object.__setattr__(invalid_metadata, "created_at", datetime(2026, 2, 1, tzinfo=UTC))
+    object.__setattr__(invalid_metadata, "source", None)
+
+    with pytest.raises(DataContractError, match="name cannot be empty"):
+        registry_api.update_dataset_metadata(settings, "dataset-001", invalid_metadata)
+    with pytest.raises(DataContractError, match="must match"):
+        registry_api.update_dataset_metadata(settings, "dataset-001", _metadata("another-id"))
+
+
+def test_update_dataset_metadata_rejects_unknown_id(tmp_path: Path) -> None:
+    settings = Settings(data_dir=tmp_path)
+    registry_api.register_dataset(settings, _record())
+
+    with pytest.raises(DataContractError, match="not registered"):
+        registry_api.update_dataset_metadata(settings, "unknown", _metadata("unknown"))
+
+
+def test_update_dataset_metadata_write_failure_preserves_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(data_dir=tmp_path)
+    registry_api.register_dataset(settings, _record())
+    registry = tmp_path / "registry.json"
+    before = registry.read_bytes()
+    monkeypatch.setattr(
+        os,
+        "replace",
+        lambda *_args: (_ for _ in ()).throw(OSError("replace failed")),
+    )
+
+    with pytest.raises(OSError, match="replace failed"):
+        registry_api.update_dataset_metadata(
+            settings, "dataset-001", _metadata("dataset-001")
+        )
+
+    assert registry.read_bytes() == before
+    assert list(tmp_path.glob(".registry.json.*.tmp")) == []
 
 
 @pytest.mark.parametrize("legacy", [[{"dataset_id": "x"}], {"datasets": []}])

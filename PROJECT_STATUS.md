@@ -6,7 +6,8 @@ Milestone 1 (Foundation) and the Presentation Layer Shell & Overview are complet
 MM-021 added the backend dataset record value object, MM-022 added safe storage
 path resolution, MM-023 added read-only backend registry loading/listing, and
 MM-024 implemented registry registration/update writes. Dataset ingestion
-remains pending.
+remains pending. MM-026 adds metadata-only updates with immutable dataset
+identity and storage paths.
 
 ### Completed
 
@@ -119,14 +120,34 @@ remains pending.
   symlink creation returned WinError 1314. Pytest emitted one cache warning
   because `.pytest_cache` is not writable. `TEMP` and `TMP` were set to a
   temporary directory under the writable workspace for test runs.
-- MM-025 and later issues have not started. No commit or push was performed.
+- MM-025 registration capability was implemented as part of MM-024. MM-026 is
+  implemented and awaiting review. MM-027 and later issues have not started. No
+  commit or push was performed.
+
+- **MM-026 — Metadata-only Updates with Immutable Identity/Storage Fields:**
+  implemented `update_dataset_metadata(settings, dataset_id, metadata)`.
+  It validates the supplied `DatasetMetadata`, requires its dataset ID to
+  match the requested existing ID, preserves the stored storage path and
+  record order, and persists through the existing atomic writer. The existing
+  `update_dataset()` API and behavior remain unchanged.
+- Added focused coverage for successful metadata updates, invalid and
+  mismatched metadata, unknown IDs, identity/storage/order preservation, and
+  atomic write failure safety.
+- Verification on Python 3.13.7: compileall, Ruff, and `git diff --check`
+  passed. `python -m pytest -v` completed with 129 passed, 6 skipped, 0 failed,
+  and 0 errors. All six symlink tests skipped because Windows symlink creation
+  returned WinError 1314. Pytest emitted one cache warning because
+  `.pytest_cache` is not writable; `TEMP` and `TMP` were set to a workspace
+  temporary directory.
+- MM-026 implementation is complete and awaiting review. MM-027 and later
+  issues have not started.
 
 ### Verification
 
 - `python -m compileall -q src app tests`: passed (exit code 0).
 - `python -m ruff check .`: passed (exit code 0).
 - `python -m pytest -v`, with PowerShell `TEMP` and `TMP` pointed to a temporary
-  directory under the writable workspace: 125 passed, 6 skipped, 0 failed, and
+  directory under the writable workspace: 129 passed, 6 skipped, 0 failed, and
   0 errors (exit code 0). All six symlink tests skipped because Windows
   returned `WinError 1314` (symlink privilege unavailable). Pytest emitted a
   cache warning because `.pytest_cache` is not writable here.
@@ -139,4 +160,4 @@ remains pending.
 
 ### Remaining work
 
-- MM-025 and later registry/ingestion work remains pending.
+- MM-027 and later registry/ingestion work remains pending.

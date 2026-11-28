@@ -346,3 +346,31 @@ def update_dataset(settings: Settings, record: DatasetRecord) -> DatasetRecord:
     )
     _write_registry(settings, updated)
     return record
+
+
+def update_dataset_metadata(
+    settings: Settings,
+    dataset_id: str,
+    metadata: DatasetMetadata,
+) -> DatasetRecord:
+    """Update a dataset's metadata without changing its identity or storage path."""
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise DataContractError("dataset_id must be a non-empty string")
+    if not isinstance(metadata, DatasetMetadata):
+        raise DataContractError("metadata must be a DatasetMetadata instance")
+    metadata.__post_init__()
+    if metadata.dataset_id != dataset_id:
+        raise DataContractError("metadata.dataset_id must match the existing dataset_id")
+
+    records = _mutable_registry_records(settings, allow_missing=False)
+    if not any(record.metadata.dataset_id == dataset_id for record in records):
+        raise DataContractError(f"dataset_id {dataset_id!r} is not registered")
+
+    updated = tuple(
+        DatasetRecord(metadata, record.storage_path)
+        if record.metadata.dataset_id == dataset_id
+        else record
+        for record in records
+    )
+    _write_registry(settings, updated)
+    return next(record for record in updated if record.metadata.dataset_id == dataset_id)
