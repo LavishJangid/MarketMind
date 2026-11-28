@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -229,3 +231,118 @@ def load_registry(settings: Settings) -> tuple[DatasetRecord, ...]:
     for record in records:
         resolve_storage_path(settings, record)
     return records
+
+
+def _validate_record(record: DatasetRecord) -> None:
+    """Recheck public input contracts at the service boundary."""
+    if not isinstance(record, DatasetRecord):
+        raise DataContractError("record must be a DatasetRecord instance")
+    if not isinstance(record.metadata, DatasetMetadata):
+        raise DataContractError("metadata must be a DatasetMetadata instance")
+    # Frozen dataclasses can still be forged or mutated through low-level APIs.
+    record.metadata.__post_init__()
+    _validate_storage_path(record.storage_path)
+
+
+def _metadata_payload(metadata: DatasetMetadata) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "dataset_id": metadata.dataset_id,
+        "name": metadata.name,
+        "industry": metadata.industry,
+        "created_at": metadata.created_at.isoformat(),
+    }
+    if metadata.source is not None:
+        payload["source"] = metadata.source
+    return payload
+
+
+def _write_registry(settings: Settings, records: tuple[DatasetRecord, ...]) -> None:
+    """Atomically persist a complete versioned registry document."""
+    destination = resolve_storage_path(settings, PurePosixPath(REGISTRY_FILENAME))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "schema_version": REGISTRY_SCHEMA_VERSION,
+        "datasets": [
+            {
+                "metadata": _metadata_payload(record.metadata),
+                "storage_path": str(record.storage_path),
+            }
+            for record in records
+        ],
+    }
+    serialized = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+    temporary_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="\n", dir=destination.parent,
+            prefix=f".{REGISTRY_FILENAME}.", suffix=".tmp", delete=False,
+        ) as temporary_file:
+            temporary_path = temporary_file.name
+            temporary_file.write(serialized)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.replace(temporary_path, destination)
+        temporary_path = None
+    except BaseException as write_error:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
+            except OSError as cleanup_error:
+                write_error.add_note(
+                    f"Temporary registry file cleanup also failed: {cleanup_error}"
+                )
+        raise
+
+
+def _mutable_registry_records(
+    settings: Settings, *, allow_missing: bool
+) -> tuple[DatasetRecord, ...]:
+    destination = resolve_storage_path(settings, PurePosixPath(REGISTRY_FILENAME))
+    if not destination.exists():
+        if allow_missing:
+            return ()
+        raise RegistryFormatError("Cannot update a dataset because the registry does not exist")
+    if destination.is_dir():
+        raise RegistryFormatError("Registry path must identify a file")
+    try:
+        payload = json.loads(destination.read_text(encoding="utf-8"))
+    except UnicodeDecodeError:
+        raise RegistryFormatError("Registry file must contain UTF-8 JSON") from None
+    except json.JSONDecodeError:
+        # Delegate to the established loader for its consistent public error.
+        return load_registry(settings)
+    if not isinstance(payload, dict) or "schema_version" not in payload:
+        raise RegistryFormatError(
+            "Cannot mutate a legacy registry; explicit migration is required first"
+        )
+    return load_registry(settings)
+
+
+def register_dataset(settings: Settings, record: DatasetRecord) -> DatasetRecord:
+    """Validate, append, and atomically persist a new dataset record."""
+    _validate_record(record)
+    resolve_storage_path(settings, record)
+    records = _mutable_registry_records(settings, allow_missing=True)
+    dataset_id = record.metadata.dataset_id
+    if any(existing.metadata.dataset_id == dataset_id for existing in records):
+        raise DataContractError(f"dataset_id {dataset_id!r} is already registered")
+    _write_registry(settings, (*records, record))
+    return record
+
+
+def update_dataset(settings: Settings, record: DatasetRecord) -> DatasetRecord:
+    """Replace an existing record by its immutable dataset identity."""
+    _validate_record(record)
+    resolve_storage_path(settings, record)
+    records = _mutable_registry_records(settings, allow_missing=False)
+    dataset_id = record.metadata.dataset_id
+    if not any(existing.metadata.dataset_id == dataset_id for existing in records):
+        raise DataContractError(f"dataset_id {dataset_id!r} is not registered")
+    updated = tuple(
+        record if existing.metadata.dataset_id == dataset_id else existing
+        for existing in records
+    )
+    _write_registry(settings, updated)
+    return record

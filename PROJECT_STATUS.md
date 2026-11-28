@@ -4,8 +4,9 @@
 
 Milestone 1 (Foundation) and the Presentation Layer Shell & Overview are complete.
 MM-021 added the backend dataset record value object, MM-022 added safe storage
-path resolution, and MM-023 added read-only backend registry loading/listing.
-Registry writes and ingestion have not been implemented.
+path resolution, MM-023 added read-only backend registry loading/listing, and
+MM-024 implemented registry registration/update writes. Dataset ingestion
+remains pending.
 
 ### Completed
 
@@ -88,15 +89,45 @@ Registry writes and ingestion have not been implemented.
   immutability.
 - MM-023 changed `src/marketmind/registry.py`, added
   `tests/test_backend_registry.py`, and updated `PROJECT_STATUS.md`.
-- **MM-024 and later work has not started.**
+- At the MM-023 completion point, MM-024 and later work had not started.
+
+- **MM-024 — Registry Registration & Update Operations:** implementation
+  complete and awaiting code review approval. It adds
+  `register_dataset(settings, record)` and
+  `update_dataset(settings, record)` while preserving the version 1 registry
+  schema and existing loader API. Both validate inputs and the complete
+  existing registry; registration rejects duplicate IDs, while updates match
+  by the record's existing dataset ID and preserve unrelated entries.
+- Registry writes serialize the full versioned document as readable UTF-8 JSON
+  to a uniquely named temporary file in the resolved registry directory, flush
+  and `fsync` it, then atomically replace `registry.json` with `os.replace()`.
+  Temporary files are removed after failures. Writes create the configured
+  data directory but do not create dataset paths.
+- `load_registry()` retains legacy read support. Registration and update reject
+  legacy list and `datasets` envelope formats. Malformed JSON, unsupported
+  versions, invalid existing records, and filesystem failures are not reset or
+  overwritten. Existing contract and registry-format exceptions are used; no
+  new exception class was needed.
+- Added `tests/test_registry_operations.py` for registration/update behavior,
+  legacy and corruption safety, directory behavior, same-directory temporary
+  files, and injected creation/write/flush/fsync/replace failures.
+- Verification on Python 3.13.7: `python -m compileall -q src app tests`,
+  `python -m ruff check .`, and `git diff --check` passed. `python -m pytest -v`
+  completed with 125 passed, 6 skipped, 0 failed, and 0 errors. The focused
+  `tests/test_registry_operations.py` run completed with 16 passed, 2 skipped,
+  0 failed, and 0 errors. All six symlink tests skipped because Windows
+  symlink creation returned WinError 1314. Pytest emitted one cache warning
+  because `.pytest_cache` is not writable. `TEMP` and `TMP` were set to a
+  temporary directory under the writable workspace for test runs.
+- MM-025 and later issues have not started. No commit or push was performed.
 
 ### Verification
 
 - `python -m compileall -q src app tests`: passed (exit code 0).
 - `python -m ruff check .`: passed (exit code 0).
 - `python -m pytest -v`, with PowerShell `TEMP` and `TMP` pointed to a temporary
-  directory under the writable workspace: 109 passed, 4 skipped, 0 failures, and
-  0 setup errors (exit code 0). All four symlink tests skipped because Windows
+  directory under the writable workspace: 125 passed, 6 skipped, 0 failed, and
+  0 errors (exit code 0). All six symlink tests skipped because Windows
   returned `WinError 1314` (symlink privilege unavailable). Pytest emitted a
   cache warning because `.pytest_cache` is not writable here.
 - `git diff --check`: passed.
@@ -108,5 +139,4 @@ Registry writes and ingestion have not been implemented.
 
 ### Remaining work
 
-- MM-024 and later registry and ingestion work remains pending and requires
-  approval before implementation.
+- MM-025 and later registry/ingestion work remains pending.
